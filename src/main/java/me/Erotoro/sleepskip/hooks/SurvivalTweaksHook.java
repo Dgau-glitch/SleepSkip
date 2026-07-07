@@ -10,11 +10,11 @@ import ru.fatumsoft.survivalTweaks.api.SurvivalTweaksApiProvider;
 /**
  * Typed adapter for the SurvivalTweaks player-state API.
  */
-final class SurvivalTweaksAfkHook {
+final class SurvivalTweaksHook {
 
     private final Plugin survivalTweaksPlugin;
 
-    SurvivalTweaksAfkHook(Plugin survivalTweaksPlugin) {
+    SurvivalTweaksHook(Plugin survivalTweaksPlugin) {
         this.survivalTweaksPlugin = survivalTweaksPlugin;
     }
 
