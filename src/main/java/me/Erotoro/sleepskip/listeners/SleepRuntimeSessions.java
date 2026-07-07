@@ -16,10 +16,16 @@ final class SleepRuntimeSessions {
 
     record SleepState(
             Collection<UUID> recipients,
-            Collection<UUID> overlayRecipients,
+            Collection<UUID> titleOverlayRecipients,
+            Collection<UUID> bossBarOverlayRecipients,
             int sleepingPlayers,
             int requiredPlayers
     ) {
+        Collection<UUID> overlayRecipients() {
+            java.util.LinkedHashSet<UUID> combined = new java.util.LinkedHashSet<>(titleOverlayRecipients);
+            combined.addAll(bossBarOverlayRecipients);
+            return combined;
+        }
     }
 
     record CachedSleepStatus(SleepListener.SleepStatus status, long cachedAtMs) {
@@ -70,7 +76,8 @@ final class SleepRuntimeSessions {
         private final long startedDayIndex;
         private final boolean forced;
         private volatile Set<UUID> recipients;
-        private volatile Set<UUID> overlayRecipients;
+        private volatile Set<UUID> titleOverlayRecipients;
+        private volatile Set<UUID> bossBarOverlayRecipients;
         private volatile Set<UUID> sleepers;
         private volatile PlatformScheduler.TaskHandle finishTaskHandle = NO_OP_TASK;
         private volatile PlatformScheduler.TaskHandle transitionTaskHandle = NO_OP_TASK;
@@ -83,7 +90,8 @@ final class SleepRuntimeSessions {
                 UUID worldId,
                 SleepTimingRules.SleepTarget sleepTarget,
                 Collection<UUID> recipients,
-                Collection<UUID> overlayRecipients,
+                Collection<UUID> titleOverlayRecipients,
+                Collection<UUID> bossBarOverlayRecipients,
                 Collection<UUID> sleepers,
                 Integer previousSleepingPercentage,
                 long transitionDurationTicks,
@@ -94,7 +102,8 @@ final class SleepRuntimeSessions {
             this.worldId = worldId;
             this.sleepTarget = sleepTarget;
             this.recipients = Set.copyOf(recipients);
-            this.overlayRecipients = Set.copyOf(overlayRecipients);
+            this.titleOverlayRecipients = Set.copyOf(titleOverlayRecipients);
+            this.bossBarOverlayRecipients = Set.copyOf(bossBarOverlayRecipients);
             this.sleepers = Set.copyOf(sleepers);
             this.previousSleepingPercentage = previousSleepingPercentage;
             this.transitionDurationTicks = transitionDurationTicks;
@@ -115,16 +124,27 @@ final class SleepRuntimeSessions {
             return recipients;
         }
 
+        Set<UUID> titleOverlayRecipients() {
+            return titleOverlayRecipients;
+        }
+
+        Set<UUID> bossBarOverlayRecipients() {
+            return bossBarOverlayRecipients;
+        }
+
         Set<UUID> overlayRecipients() {
-            return overlayRecipients;
+            java.util.LinkedHashSet<UUID> combined = new java.util.LinkedHashSet<>(titleOverlayRecipients);
+            combined.addAll(bossBarOverlayRecipients);
+            return combined;
         }
 
         Set<UUID> sleepers() {
             return sleepers;
         }
 
-        void updateOverlayRecipients(Collection<UUID> overlayRecipients) {
-            this.overlayRecipients = Set.copyOf(overlayRecipients);
+        void updateOverlayRecipients(Collection<UUID> titleOverlayRecipients, Collection<UUID> bossBarOverlayRecipients) {
+            this.titleOverlayRecipients = Set.copyOf(titleOverlayRecipients);
+            this.bossBarOverlayRecipients = Set.copyOf(bossBarOverlayRecipients);
         }
 
         void updateSleepers(Collection<UUID> sleepers) {

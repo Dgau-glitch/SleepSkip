@@ -117,6 +117,25 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void validateMigratesLegacyOverlayShowToAllToPerChannelSettings() {
+        SleepSkip plugin = mock(SleepSkip.class);
+        FileConfiguration config = new YamlConfiguration();
+        config.set("overlay.show-to-all", true);
+
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test-config-validator"));
+        when(plugin.tr(anyString(), anyString())).thenAnswer(invocation -> invocation.getArgument(1));
+
+        ConfigValidator.validate(plugin);
+
+        assertNull(config.get("overlay.show-to-all"));
+        assertTrue(config.getBoolean("overlay.title.show-to-all"));
+        assertTrue(config.getBoolean("overlay.bossbar.show-to-all"));
+        verify(plugin, times(1)).saveConfig();
+        verify(plugin, times(1)).reloadConfig();
+    }
+
+    @Test
     void validateNormalizesInvalidOverlayModeAndBossBarStyle() {
         SleepSkip plugin = mock(SleepSkip.class);
         FileConfiguration config = new YamlConfiguration();

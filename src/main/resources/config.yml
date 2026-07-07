@@ -23,14 +23,16 @@ sleep:
 overlay:
   enabled: true        # master switch for all on-screen feedback (titles and bossbar)
   mode: "both"         # title, bossbar, both
-  show-to-all: false    # false = only sleeping players see overlay; true = all eligible players see it
   update-interval-ticks: 10
+  title:
+    show-to-all: false     # false = only sleeping players see title; true = all eligible players see it
   fade-in-ticks: 1
   stay-ticks: 24
   fade-out-ticks: 1
   show-status-before-skip: true
   show-progress-during-transition: true
   bossbar:
+    show-to-all: false            # false = only sleeping players see bossbar; true = all eligible players see it
     allow-personal-toggle: true   # let players with sleepskip.bossbar.toggle run /sleep bossbar on|off
     default-visible: true         # default bossbar visibility for players who never toggled it
     style: "PROGRESS"             # PROGRESS, NOTCHED_6, NOTCHED_10, NOTCHED_12, NOTCHED_20

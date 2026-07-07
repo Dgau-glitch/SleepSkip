@@ -17,7 +17,7 @@ final class SleepStatusTracker {
 
     private static final SleepListener.SleepStatus NEUTRAL_SLEEP_STATUS = new SleepListener.SleepStatus(0, 0, 1);
     private static final SleepRuntimeSessions.SleepState NEUTRAL_SLEEP_STATE =
-            new SleepRuntimeSessions.SleepState(List.of(), List.of(), 0, 1);
+            new SleepRuntimeSessions.SleepState(List.of(), List.of(), List.of(), 0, 1);
 
     private final SleepSkip plugin;
     private final PlayerStateService playerStateService;
@@ -103,7 +103,8 @@ final class SleepStatusTracker {
         boolean perWorld = plugin.getConfig().getBoolean("settings.per-world", false);
         boolean countAfkSleepers = plugin.getConfig().getBoolean("settings.count-afk-sleepers", true);
         boolean ignoreAfk = plugin.getConfig().getBoolean("settings.ignore-afk", true);
-        boolean showOverlayToAll = plugin.getConfig().getBoolean("overlay.show-to-all", false);
+        boolean showTitleToAll = plugin.getConfig().getBoolean("overlay.title.show-to-all", false);
+        boolean showBossBarToAll = plugin.getConfig().getBoolean("overlay.bossbar.show-to-all", false);
         UUID targetWorldId = world.getUID();
 
         for (PlayerStateSnapshot snapshot : playerStateService.getSnapshots()) {
@@ -116,9 +117,16 @@ final class SleepStatusTracker {
             }
         }
 
-        List<UUID> overlayRecipients = showOverlayToAll ? recipients : sleepingOverlayRecipients;
+        List<UUID> titleOverlayRecipients = showTitleToAll ? recipients : sleepingOverlayRecipients;
+        List<UUID> bossBarOverlayRecipients = showBossBarToAll ? recipients : sleepingOverlayRecipients;
         SleepListener.SleepStatus status = getSleepStatus(world, bypassCache, cacheTtlMs, isOverworld);
-        return new SleepRuntimeSessions.SleepState(recipients, overlayRecipients, status.sleepingPlayers(), status.requiredPlayers());
+        return new SleepRuntimeSessions.SleepState(
+                recipients,
+                titleOverlayRecipients,
+                bossBarOverlayRecipients,
+                status.sleepingPlayers(),
+                status.requiredPlayers()
+        );
     }
 
     private SleepListener.SleepStatus calculateSleepStatus(World world) {

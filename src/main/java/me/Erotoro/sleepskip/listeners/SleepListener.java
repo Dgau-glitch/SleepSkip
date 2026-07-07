@@ -302,23 +302,34 @@ public class SleepListener implements Listener {
 
         SleepState state = getSleepState(world);
         session.updateRecipients(state.recipients());
-        Set<UUID> overlayRecipients = resolveActiveOverlayRecipients(session, state);
-        session.updateOverlayRecipients(overlayRecipients);
-        sleepOverlayService.refreshRecipients(world, overlayRecipients);
+        Set<UUID> titleOverlayRecipients = resolveActiveTitleOverlayRecipients(session, state);
+        Set<UUID> bossBarOverlayRecipients = resolveActiveBossBarOverlayRecipients(session, state);
+        session.updateOverlayRecipients(titleOverlayRecipients, bossBarOverlayRecipients);
+        sleepOverlayService.refreshRecipients(world, titleOverlayRecipients, bossBarOverlayRecipients);
 
         if (!isActiveSessionStillValid(world, session, state, currentSleepTarget)) {
             cancelActiveSkip(world, session, state.recipients(), true);
         }
     }
 
-    private Set<UUID> resolveActiveOverlayRecipients(ActiveSkipSession session, SleepState state) {
+    private Set<UUID> resolveActiveTitleOverlayRecipients(ActiveSkipSession session, SleepState state) {
         if (!session.isCommitted()) {
-            return Set.copyOf(state.overlayRecipients());
+            return Set.copyOf(state.titleOverlayRecipients());
         }
 
-        Set<UUID> overlayRecipients = new LinkedHashSet<>(session.overlayRecipients());
-        overlayRecipients.addAll(state.overlayRecipients());
-        return overlayRecipients;
+        Set<UUID> recipients = new LinkedHashSet<>(session.titleOverlayRecipients());
+        recipients.addAll(state.titleOverlayRecipients());
+        return recipients;
+    }
+
+    private Set<UUID> resolveActiveBossBarOverlayRecipients(ActiveSkipSession session, SleepState state) {
+        if (!session.isCommitted()) {
+            return Set.copyOf(state.bossBarOverlayRecipients());
+        }
+
+        Set<UUID> recipients = new LinkedHashSet<>(session.bossBarOverlayRecipients());
+        recipients.addAll(state.bossBarOverlayRecipients());
+        return recipients;
     }
 
     private boolean isActiveSessionStillValid(
@@ -403,14 +414,24 @@ public class SleepListener implements Listener {
     }
 
     private void startSkip(World world, SleepState state, SleepTimingRules.SleepTarget sleepTarget) {
-        startSkip(world, sleepTarget, state.recipients(), state.overlayRecipients(), state.sleepingPlayers(), state.requiredPlayers(), false);
+        startSkip(
+                world,
+                sleepTarget,
+                state.recipients(),
+                state.titleOverlayRecipients(),
+                state.bossBarOverlayRecipients(),
+                state.sleepingPlayers(),
+                state.requiredPlayers(),
+                false
+        );
     }
 
     private void startSkip(
             World world,
             SleepTimingRules.SleepTarget sleepTarget,
             Collection<UUID> recipients,
-            Collection<UUID> overlayRecipients,
+            Collection<UUID> titleOverlayRecipients,
+            Collection<UUID> bossBarOverlayRecipients,
             int sleepingPlayers,
             int requiredPlayers,
             boolean forced
@@ -429,7 +450,8 @@ public class SleepListener implements Listener {
                 worldId,
                 sleepTarget,
                 Set.copyOf(recipients),
-                Set.copyOf(overlayRecipients),
+                Set.copyOf(titleOverlayRecipients),
+                Set.copyOf(bossBarOverlayRecipients),
                 collectWorldSleepers(world),
                 previousSleepingPercentage,
                 transitionDurationTicks,
@@ -468,7 +490,8 @@ public class SleepListener implements Listener {
                         + ",transitionTicks=" + transitionDurationTicks
                         + ",completionDelayTicks=" + completionDelayTicks
                         + ",recipients=" + recipients.size()
-                        + ",overlayRecipients=" + overlayRecipients.size()
+                        + ",titleOverlayRecipients=" + titleOverlayRecipients.size()
+                        + ",bossBarOverlayRecipients=" + bossBarOverlayRecipients.size()
         );
 
         String startMessage = sleepTarget == SleepTimingRules.SleepTarget.NIGHT
@@ -478,7 +501,8 @@ public class SleepListener implements Listener {
         sleepOverlayService.startTransition(
                 world,
                 sleepTarget,
-                Set.copyOf(overlayRecipients),
+                Set.copyOf(titleOverlayRecipients),
+                Set.copyOf(bossBarOverlayRecipients),
                 sleepingPlayers,
                 requiredPlayers,
                 transitionDurationTicks
@@ -528,9 +552,10 @@ public class SleepListener implements Listener {
 
         SleepState state = getSleepState(world);
         session.updateRecipients(state.recipients());
-        Set<UUID> overlayRecipients = resolveActiveOverlayRecipients(session, state);
-        session.updateOverlayRecipients(overlayRecipients);
-        sleepOverlayService.refreshRecipients(world, overlayRecipients);
+        Set<UUID> titleOverlayRecipients = resolveActiveTitleOverlayRecipients(session, state);
+        Set<UUID> bossBarOverlayRecipients = resolveActiveBossBarOverlayRecipients(session, state);
+        session.updateOverlayRecipients(titleOverlayRecipients, bossBarOverlayRecipients);
+        sleepOverlayService.refreshRecipients(world, titleOverlayRecipients, bossBarOverlayRecipients);
 
         SleepTimingRules.SleepTarget currentSleepTarget = getSleepTarget(world);
         if (!isActiveSessionStillValid(world, session, state, currentSleepTarget)) {
@@ -553,7 +578,8 @@ public class SleepListener implements Listener {
         currentSpeedMultipliers.put(worldId, profile.speedMultiplier());
         sleepOverlayService.showAcceleration(
                 world,
-                state.overlayRecipients(),
+                state.titleOverlayRecipients(),
+                state.bossBarOverlayRecipients(),
                 state.sleepingPlayers(),
                 state.requiredPlayers(),
                 profile.speedMultiplier()
@@ -658,7 +684,7 @@ public class SleepListener implements Listener {
         message = message
                 .replace("{sleeping}", String.valueOf(state.sleepingPlayers()))
                 .replace("{needed}", String.valueOf(state.requiredPlayers()));
-        sleepOverlayService.showStatus(world, sleepTarget, state.overlayRecipients(), state.sleepingPlayers(), state.requiredPlayers());
+        sleepOverlayService.showStatus(world, sleepTarget, state.titleOverlayRecipients(), state.bossBarOverlayRecipients(), state.sleepingPlayers(), state.requiredPlayers());
         sendConfiguredMessage(world, state.recipients(), message);
     }
 
@@ -1248,7 +1274,8 @@ public class SleepListener implements Listener {
                 world,
                 sleepTarget,
                 collectWorldRecipients(world),
-                state.overlayRecipients(),
+                state.titleOverlayRecipients(),
+                state.bossBarOverlayRecipients(),
                 state.sleepingPlayers(),
                 Math.max(1, state.requiredPlayers()),
                 true

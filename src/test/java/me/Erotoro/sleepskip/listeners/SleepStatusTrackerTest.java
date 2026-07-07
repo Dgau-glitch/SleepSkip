@@ -41,7 +41,8 @@ class SleepStatusTrackerTest {
         SleepRuntimeSessions.SleepState state = tracker.getSleepState(world, false, true, 0L);
 
         assertTrue(state.recipients().isEmpty());
-        assertTrue(state.overlayRecipients().isEmpty());
+        assertTrue(state.titleOverlayRecipients().isEmpty());
+        assertTrue(state.bossBarOverlayRecipients().isEmpty());
         assertEquals(0, state.sleepingPlayers());
         assertEquals(1, state.requiredPlayers());
         verify(playerStateService, never()).getSnapshots();
@@ -80,7 +81,8 @@ class SleepStatusTrackerTest {
         SleepRuntimeSessions.SleepState state = tracker.getSleepState(world, true, true, 0L);
 
         assertEquals(List.of(playerId), List.copyOf(state.recipients()));
-        assertTrue(state.overlayRecipients().isEmpty());
+        assertTrue(state.titleOverlayRecipients().isEmpty());
+        assertTrue(state.bossBarOverlayRecipients().isEmpty());
         assertEquals(0, state.sleepingPlayers());
         assertEquals(1, state.requiredPlayers());
 
@@ -88,7 +90,8 @@ class SleepStatusTrackerTest {
         state = tracker.getSleepState(world, true, true, 0L);
 
         assertEquals(List.of(playerId), List.copyOf(state.recipients()));
-        assertEquals(List.of(playerId), List.copyOf(state.overlayRecipients()));
+        assertEquals(List.of(playerId), List.copyOf(state.titleOverlayRecipients()));
+        assertEquals(List.of(playerId), List.copyOf(state.bossBarOverlayRecipients()));
         assertEquals(1, state.sleepingPlayers());
         assertEquals(1, state.requiredPlayers());
         verify(playerStateService, atLeastOnce()).getSnapshots();
@@ -136,7 +139,7 @@ class SleepStatusTrackerTest {
     }
 
     @Test
-    void overlayRecipientsDefaultToSleepingPlayersOnly() {
+    void titleOverlayRecipientsDefaultToSleepingPlayersOnly() {
         UUID worldId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
         UUID sleepingPlayerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         UUID awakePlayerId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
@@ -145,7 +148,7 @@ class SleepStatusTrackerTest {
         PlayerStateService playerStateService = mock(PlayerStateService.class);
         World world = mock(World.class);
         FileConfiguration config = baseSleepConfig();
-        config.set("overlay.show-to-all", false);
+        config.set("overlay.title.show-to-all", false);
 
         when(plugin.getConfig()).thenReturn(config);
         when(world.getUID()).thenReturn(worldId);
@@ -160,11 +163,12 @@ class SleepStatusTrackerTest {
         SleepRuntimeSessions.SleepState state = tracker.getSleepState(world, true, true, 0L);
 
         assertEquals(List.of(sleepingPlayerId, awakePlayerId), List.copyOf(state.recipients()));
-        assertEquals(List.of(sleepingPlayerId), List.copyOf(state.overlayRecipients()));
+        assertEquals(List.of(sleepingPlayerId), List.copyOf(state.titleOverlayRecipients()));
+        assertEquals(List.of(sleepingPlayerId), List.copyOf(state.bossBarOverlayRecipients()));
     }
 
     @Test
-    void overlayRecipientsCanIncludeAllEligiblePlayers() {
+    void titleOverlayRecipientsCanIncludeAllEligiblePlayers() {
         UUID worldId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
         UUID sleepingPlayerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         UUID awakePlayerId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
@@ -173,7 +177,7 @@ class SleepStatusTrackerTest {
         PlayerStateService playerStateService = mock(PlayerStateService.class);
         World world = mock(World.class);
         FileConfiguration config = baseSleepConfig();
-        config.set("overlay.show-to-all", true);
+        config.set("overlay.title.show-to-all", true);
 
         when(plugin.getConfig()).thenReturn(config);
         when(world.getUID()).thenReturn(worldId);
@@ -188,7 +192,37 @@ class SleepStatusTrackerTest {
         SleepRuntimeSessions.SleepState state = tracker.getSleepState(world, true, true, 0L);
 
         assertEquals(List.of(sleepingPlayerId, awakePlayerId), List.copyOf(state.recipients()));
-        assertEquals(List.of(sleepingPlayerId, awakePlayerId), List.copyOf(state.overlayRecipients()));
+        assertEquals(List.of(sleepingPlayerId, awakePlayerId), List.copyOf(state.titleOverlayRecipients()));
+        assertEquals(List.of(sleepingPlayerId), List.copyOf(state.bossBarOverlayRecipients()));
+    }
+
+    @Test
+    void bossBarOverlayRecipientsCanIncludeAllEligiblePlayersIndependentlyFromTitle() {
+        UUID worldId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        UUID sleepingPlayerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        UUID awakePlayerId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+
+        SleepSkip plugin = mock(SleepSkip.class);
+        PlayerStateService playerStateService = mock(PlayerStateService.class);
+        World world = mock(World.class);
+        FileConfiguration config = baseSleepConfig();
+        config.set("overlay.title.show-to-all", false);
+        config.set("overlay.bossbar.show-to-all", true);
+
+        when(plugin.getConfig()).thenReturn(config);
+        when(world.getUID()).thenReturn(worldId);
+        when(playerStateService.getSnapshots()).thenReturn(List.of(
+                snapshot(sleepingPlayerId, worldId, true),
+                snapshot(awakePlayerId, worldId, false)
+        ));
+
+        SleepStatusTracker tracker = new SleepStatusTracker(plugin, playerStateService, new PlayerEligibilityService());
+        tracker.markSleeping(sleepingPlayerId);
+
+        SleepRuntimeSessions.SleepState state = tracker.getSleepState(world, true, true, 0L);
+
+        assertEquals(List.of(sleepingPlayerId), List.copyOf(state.titleOverlayRecipients()));
+        assertEquals(List.of(sleepingPlayerId, awakePlayerId), List.copyOf(state.bossBarOverlayRecipients()));
     }
 
     private static FileConfiguration baseSleepConfig() {
