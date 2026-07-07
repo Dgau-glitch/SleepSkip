@@ -2,7 +2,6 @@ package me.Erotoro.sleepskip.hooks;
 
 import me.Erotoro.sleepskip.SleepSkip;
 import org.bukkit.entity.Player;
-import org.bukkit.metadata.MetadataValue;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 
@@ -97,9 +96,13 @@ public class ExternalPluginHooks {
     }
 
     private boolean hasTruthyMetadata(Player player, String key) {
-        List<MetadataValue> metadata = player.getMetadata(key);
-        for (MetadataValue value : metadata) {
-            if (value.asBoolean()) {
+        Object metadata = invokeExact(player, "getMetadata", new Class<?>[]{String.class}, key);
+        if (!(metadata instanceof Iterable<?> values)) {
+            return false;
+        }
+
+        for (Object value : values) {
+            if (Boolean.TRUE.equals(invoke(value, "asBoolean"))) {
                 return true;
             }
         }

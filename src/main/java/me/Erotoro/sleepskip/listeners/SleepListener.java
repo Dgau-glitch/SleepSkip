@@ -20,7 +20,7 @@ import me.Erotoro.sleepskip.util.PlatformScheduler;
 import me.Erotoro.sleepskip.util.SleepTimingRules;
 import me.Erotoro.sleepskip.utils.ActionBar;
 import org.bukkit.Bukkit;
-import org.bukkit.GameRule;
+import org.bukkit.GameRules;
 import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
@@ -80,7 +80,7 @@ public class SleepListener implements Listener {
 
     @EventHandler
     public void onPlayerSleep(PlayerBedEnterEvent event) {
-        if (event.getBedEnterResult() != PlayerBedEnterEvent.BedEnterResult.OK) {
+        if (event.isCancelled()) {
             return;
         }
 
@@ -896,12 +896,12 @@ public class SleepListener implements Listener {
     }
 
     private Integer disableVanillaSleepSkip(World world) {
-        Integer currentPercentage = world.getGameRuleValue(GameRule.PLAYERS_SLEEPING_PERCENTAGE);
+        Integer currentPercentage = world.getGameRuleValue(GameRules.PLAYERS_SLEEPING_PERCENTAGE);
         if (currentPercentage == null) {
             return null;
         }
 
-        runWorldState(world, () -> world.setGameRule(GameRule.PLAYERS_SLEEPING_PERCENTAGE, DISABLED_SLEEP_PERCENTAGE));
+        runWorldState(world, () -> world.setGameRule(GameRules.PLAYERS_SLEEPING_PERCENTAGE, DISABLED_SLEEP_PERCENTAGE));
         return currentPercentage;
     }
 
@@ -951,7 +951,7 @@ public class SleepListener implements Listener {
             return;
         }
 
-        runWorldState(world, () -> world.setGameRule(GameRule.PLAYERS_SLEEPING_PERCENTAGE, previousPercentage));
+        runWorldState(world, () -> world.setGameRule(GameRules.PLAYERS_SLEEPING_PERCENTAGE, previousPercentage));
     }
 
     private void cancelActiveSkip(
