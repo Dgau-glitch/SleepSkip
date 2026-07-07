@@ -33,7 +33,7 @@ public class ExternalPluginHooks {
         PluginManager pluginManager = plugin.getServer().getPluginManager();
         this.essentialsPlugin = pluginManager.getPlugin("Essentials");
         this.cmiPlugin = pluginManager.getPlugin("CMI");
-        this.survivalTweaksAfkHook = new SurvivalTweaksAfkHook(pluginManager.getPlugin("SurvivalTweaks"), this::warnOnce);
+        this.survivalTweaksAfkHook = new SurvivalTweaksAfkHook(pluginManager.getPlugin("SurvivalTweaks"));
     }
 
     public void logDetectedHooks() {
@@ -54,7 +54,7 @@ public class ExternalPluginHooks {
         if (survivalTweaksAfkHook.isAvailable()) {
             plugin.getLogger().info(plugin.tr(
                     "logs.hook-survivaltweaks",
-                    "Hooked into SurvivalTweaks for AFK detection."
+                    "Hooked into SurvivalTweaks for AFK and vanish detection."
             ));
         } else {
             plugin.getLogger().warning(plugin.tr(
@@ -78,7 +78,8 @@ public class ExternalPluginHooks {
     }
 
     public boolean isVanished(Player player) {
-        return hasTruthyMetadata(player, "vanished")
+        return survivalTweaksAfkHook.isVanished(player)
+                || hasTruthyMetadata(player, "vanished")
                 || invokeUserBoolean(essentialsPlugin, "getUser", player, "isVanished")
                 || isCmiBoolean(player, "isVanished");
     }
