@@ -19,12 +19,14 @@ import java.util.UUID;
  */
 public class DayCounterService {
     private static final long NATURAL_DAY_POLL_INTERVAL_TICKS = 20L;
+    private static final long SAVE_DEBOUNCE_TICKS = 20L;
 
     private final SleepSkip plugin;
     private final MorningAnnouncementService morningAnnouncementService;
     private final File dataFile;
     private YamlConfiguration dataConfig;
     private PlatformScheduler.TaskHandle monitorTask = () -> { };
+    private PlatformScheduler.TaskHandle pendingSaveTask = () -> { };
 
     public DayCounterService(SleepSkip plugin) {
         this.plugin = plugin;
@@ -34,21 +36,27 @@ public class DayCounterService {
 
     public synchronized void reload() {
         stop();
-
-        if (!plugin.getDataFolder().exists() && !plugin.getDataFolder().mkdirs()) {
-            plugin.getLogger().warning("Failed to create plugin data folder for day counter storage.");
-        }
-        if (!dataFile.exists()) {
-            try {
-                if (!dataFile.createNewFile()) {
-                    plugin.getLogger().warning("Failed to create data.yml for day counter storage.");
-                }
-            } catch (IOException exception) {
-                plugin.getLogger().warning("Failed to create data.yml: " + exception.getMessage());
+        PlatformScheduler.runAsync(plugin, () -> {
+            if (!plugin.getDataFolder().exists() && !plugin.getDataFolder().mkdirs()) {
+                plugin.getLogger().warning("Failed to create plugin data folder for day counter storage.");
             }
-        }
+            if (!dataFile.exists()) {
+                try {
+                    if (!dataFile.createNewFile()) {
+                        plugin.getLogger().warning("Failed to create data.yml for day counter storage.");
+                    }
+                } catch (IOException exception) {
+                    plugin.getLogger().warning("Failed to create data.yml: " + exception.getMessage());
+                }
+            }
 
-        dataConfig = YamlConfiguration.loadConfiguration(dataFile);
+            YamlConfiguration loadedConfig = YamlConfiguration.loadConfiguration(dataFile);
+            PlatformScheduler.runGlobal(plugin, () -> finishReload(loadedConfig));
+        });
+    }
+
+    private synchronized void finishReload(YamlConfiguration loadedConfig) {
+        dataConfig = loadedConfig;
         initializeWorldState();
         startNaturalDayMonitor();
     }
@@ -56,6 +64,8 @@ public class DayCounterService {
     public synchronized void stop() {
         monitorTask.cancel();
         monitorTask = () -> { };
+        pendingSaveTask.cancel();
+        pendingSaveTask = () -> { };
     }
 
     public synchronized int getDayCount(World world) {
@@ -69,6 +79,9 @@ public class DayCounterService {
 
         long currentDayIndex = currentDayIndex(world);
         synchronized (this) {
+            if (dataConfig == null) {
+                return;
+            }
             long lastAnnouncedDayIndex = dataConfig.getLong(path(world, "last-announced-day-index"), -1L);
             if (lastAnnouncedDayIndex >= currentDayIndex) {
                 return;
@@ -124,6 +137,9 @@ public class DayCounterService {
         }
 
         synchronized (this) {
+            if (dataConfig == null) {
+                return;
+            }
             boolean changed = false;
             for (World world : Bukkit.getWorlds()) {
                 if (!isTrackedWorld(world)) {
@@ -223,10 +239,24 @@ public class DayCounterService {
     }
 
     private void save() {
-        try {
-            dataConfig.save(dataFile);
-        } catch (IOException exception) {
-            plugin.getLogger().warning("Failed to save data.yml: " + exception.getMessage());
+        if (dataConfig == null) {
+            return;
         }
+
+        YamlConfiguration snapshot = new YamlConfiguration();
+        for (String key : dataConfig.getKeys(true)) {
+            if (!dataConfig.isConfigurationSection(key)) {
+                snapshot.set(key, dataConfig.get(key));
+            }
+        }
+
+        pendingSaveTask.cancel();
+        pendingSaveTask = PlatformScheduler.runAsyncDelayed(plugin, () -> {
+            try {
+                snapshot.save(dataFile);
+            } catch (IOException exception) {
+                plugin.getLogger().warning("Failed to save data.yml: " + exception.getMessage());
+            }
+        }, SAVE_DEBOUNCE_TICKS);
     }
 }

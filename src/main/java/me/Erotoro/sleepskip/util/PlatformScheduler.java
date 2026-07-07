@@ -4,12 +4,14 @@ import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import me.Erotoro.sleepskip.SleepSkip;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.util.concurrent.TimeUnit;
 
 /**
- * Small facade over Bukkit/Paper/Folia schedulers used by the plugin.
+ * Folia 1.21.11+ scheduler facade.
+ * <p>
+ * Global tasks are only for global state such as time/weather coordination. Player/entity work must
+ * go through {@link Player#getScheduler()}. Blocking work must use the async scheduler.
  */
 public final class PlatformScheduler {
 
@@ -17,58 +19,48 @@ public final class PlatformScheduler {
     }
 
     public static void runGlobal(SleepSkip plugin, Runnable runnable) {
-        if (plugin.isFolia()) {
-            Bukkit.getGlobalRegionScheduler().execute(plugin, runnable);
-            return;
-        }
-        Bukkit.getScheduler().runTask(plugin, runnable);
+        Bukkit.getGlobalRegionScheduler().execute(plugin, runnable);
     }
 
     public static TaskHandle runGlobalDelayed(SleepSkip plugin, Runnable runnable, long delayTicks) {
-        if (plugin.isFolia()) {
-            ScheduledTask task = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, scheduledTask -> runnable.run(), delayTicks);
-            return task::cancel;
-        }
-
-        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, runnable, delayTicks);
+        ScheduledTask task = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, scheduledTask -> runnable.run(), delayTicks);
         return task::cancel;
     }
 
     public static TaskHandle runGlobalAtFixedRate(SleepSkip plugin, Runnable runnable, long delayTicks, long periodTicks) {
-        if (plugin.isFolia()) {
-            ScheduledTask task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, scheduledTask -> runnable.run(), delayTicks, periodTicks);
-            return task::cancel;
-        }
-
-        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, runnable, delayTicks, periodTicks);
+        ScheduledTask task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, scheduledTask -> runnable.run(), delayTicks, periodTicks);
         return task::cancel;
     }
 
-    /** Runs work off the server threads (network, disk, etc.); never touch game state from here. */
-    public static void runAsync(SleepSkip plugin, Runnable runnable) {
-        if (plugin.isFolia()) {
-            Bukkit.getAsyncScheduler().runNow(plugin, scheduledTask -> runnable.run());
-            return;
-        }
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, runnable);
+    /** Runs blocking or heavy work off the server tick threads. Never touch Bukkit state here. */
+    public static TaskHandle runAsync(SleepSkip plugin, Runnable runnable) {
+        ScheduledTask task = Bukkit.getAsyncScheduler().runNow(plugin, scheduledTask -> runnable.run());
+        return task::cancel;
+    }
+
+    /** Delayed off-thread work. Delay is expressed in ticks for parity with the sync API. */
+    public static TaskHandle runAsyncDelayed(SleepSkip plugin, Runnable runnable, long delayTicks) {
+        long safeDelayTicks = Math.max(1L, delayTicks);
+        ScheduledTask task = Bukkit.getAsyncScheduler().runDelayed(
+                plugin,
+                scheduledTask -> runnable.run(),
+                safeDelayTicks * 50L,
+                TimeUnit.MILLISECONDS
+        );
+        return task::cancel;
     }
 
     /** Repeating off-thread work. Delay/period are expressed in ticks for parity with the sync API. */
     public static TaskHandle runAsyncAtFixedRate(SleepSkip plugin, Runnable runnable, long initialDelayTicks, long periodTicks) {
         long safeInitialTicks = Math.max(1L, initialDelayTicks);
         long safePeriodTicks = Math.max(1L, periodTicks);
-        if (plugin.isFolia()) {
-            ScheduledTask task = Bukkit.getAsyncScheduler().runAtFixedRate(
-                    plugin,
-                    scheduledTask -> runnable.run(),
-                    safeInitialTicks * 50L,
-                    safePeriodTicks * 50L,
-                    TimeUnit.MILLISECONDS
-            );
-            return task::cancel;
-        }
-
-        BukkitTask task = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, runnable, safeInitialTicks, safePeriodTicks);
+        ScheduledTask task = Bukkit.getAsyncScheduler().runAtFixedRate(
+                plugin,
+                scheduledTask -> runnable.run(),
+                safeInitialTicks * 50L,
+                safePeriodTicks * 50L,
+                TimeUnit.MILLISECONDS
+        );
         return task::cancel;
     }
 
@@ -77,11 +69,7 @@ public final class PlatformScheduler {
             return;
         }
 
-        if (plugin.isFolia()) {
-            player.getScheduler().run(plugin, task -> runnable.run(), null);
-            return;
-        }
-        Bukkit.getScheduler().runTask(plugin, runnable);
+        player.getScheduler().run(plugin, task -> runnable.run(), null);
     }
 
     public static void runForPlayerDelayed(SleepSkip plugin, Player player, Runnable runnable, long delayTicks) {
@@ -89,11 +77,7 @@ public final class PlatformScheduler {
             return;
         }
 
-        if (plugin.isFolia()) {
-            player.getScheduler().runDelayed(plugin, task -> runnable.run(), null, delayTicks);
-            return;
-        }
-        Bukkit.getScheduler().runTaskLater(plugin, runnable, delayTicks);
+        player.getScheduler().runDelayed(plugin, task -> runnable.run(), null, delayTicks);
     }
 
     @FunctionalInterface

@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -61,6 +62,9 @@ public class SleepOverlayService {
     // Explicit per-player visibility preferences (absent = use overlay.bossbar.default-visible).
     private final ConcurrentHashMap<UUID, Boolean> bossBarPreferences = new ConcurrentHashMap<>();
     private final File bossBarPreferencesFile;
+    private static final long BOSSBAR_PREFERENCES_SAVE_DEBOUNCE_TICKS = 20L;
+
+    private PlatformScheduler.TaskHandle pendingBossBarPreferencesSave = () -> { };
 
     public SleepOverlayService(SleepSkip plugin) {
         this.plugin = plugin;
@@ -748,7 +752,7 @@ public class SleepOverlayService {
     /** Persists a player's personal bossbar preference and applies a hide immediately when turned off. */
     public void setBossBarVisible(UUID playerId, boolean visible) {
         bossBarPreferences.put(playerId, visible);
-        saveBossBarPreferences();
+        queueBossBarPreferencesSave();
 
         if (!visible) {
             Player player = Bukkit.getPlayer(playerId);
@@ -801,9 +805,18 @@ public class SleepOverlayService {
         }
     }
 
-    private synchronized void saveBossBarPreferences() {
+    private synchronized void queueBossBarPreferencesSave() {
+        pendingBossBarPreferencesSave.cancel();
+        pendingBossBarPreferencesSave = PlatformScheduler.runAsyncDelayed(
+                plugin,
+                () -> saveBossBarPreferencesSnapshot(Map.copyOf(bossBarPreferences)),
+                BOSSBAR_PREFERENCES_SAVE_DEBOUNCE_TICKS
+        );
+    }
+
+    private void saveBossBarPreferencesSnapshot(Map<UUID, Boolean> preferencesSnapshot) {
         YamlConfiguration config = new YamlConfiguration();
-        for (var entry : bossBarPreferences.entrySet()) {
+        for (var entry : preferencesSnapshot.entrySet()) {
             config.set("players." + entry.getKey(), entry.getValue());
         }
         try {

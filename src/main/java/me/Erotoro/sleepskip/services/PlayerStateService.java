@@ -15,10 +15,8 @@ import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.permissions.PermissionAttachmentInfo;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -36,9 +34,7 @@ public class PlayerStateService implements Listener {
     private final AFKChecker afkChecker;
     private final ExternalPluginHooks externalPluginHooks;
     private final ConcurrentHashMap<UUID, PlayerStateSnapshot> snapshots = new ConcurrentHashMap<>();
-    private final Set<UUID> bukkitOnlineIdsScratch = new HashSet<>();
     private final ConcurrentHashMap<UUID, ScheduledTask> foliaTasks = new ConcurrentHashMap<>();
-    private BukkitTask bukkitRefreshTask;
 
     public PlayerStateService(SleepSkip plugin, AFKChecker afkChecker, ExternalPluginHooks externalPluginHooks) {
         this.plugin = plugin;
@@ -48,23 +44,12 @@ public class PlayerStateService implements Listener {
     }
 
     public void start() {
-        if (plugin.isFolia()) {
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                scheduleFoliaRefresh(player);
-            }
-            return;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            scheduleFoliaRefresh(player);
         }
-
-        bukkitRefreshTask = Bukkit.getScheduler().runTaskTimer(plugin, this::refreshAllBukkitPlayers, 1L, REFRESH_PERIOD_TICKS);
-        refreshAllBukkitPlayers();
     }
 
     public void stop() {
-        if (bukkitRefreshTask != null) {
-            bukkitRefreshTask.cancel();
-            bukkitRefreshTask = null;
-        }
-
         for (ScheduledTask task : List.copyOf(foliaTasks.values())) {
             task.cancel();
         }
@@ -77,12 +62,7 @@ public class PlayerStateService implements Listener {
             return;
         }
 
-        if (plugin.isFolia()) {
-            player.getScheduler().run(plugin, task -> refreshSnapshot(player), () -> removePlayer(player.getUniqueId()));
-            return;
-        }
-
-        refreshSnapshot(player);
+        player.getScheduler().run(plugin, task -> refreshSnapshot(player), () -> removePlayer(player.getUniqueId()));
     }
 
     public PlayerStateSnapshot getSnapshot(UUID playerId) {
@@ -100,12 +80,7 @@ public class PlayerStateService implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        if (plugin.isFolia()) {
-            scheduleFoliaRefresh(player);
-            return;
-        }
-
-        refreshSnapshot(player);
+        scheduleFoliaRefresh(player);
     }
 
     @EventHandler
@@ -121,16 +96,6 @@ public class PlayerStateService implements Listener {
     @EventHandler
     public void onPlayerGameModeChange(PlayerGameModeChangeEvent event) {
         refreshNow(event.getPlayer());
-    }
-
-    private void refreshAllBukkitPlayers() {
-        bukkitOnlineIdsScratch.clear();
-        Collection<? extends Player> onlinePlayers = Bukkit.getOnlinePlayers();
-        for (Player player : onlinePlayers) {
-            bukkitOnlineIdsScratch.add(player.getUniqueId());
-            refreshSnapshot(player);
-        }
-        snapshots.keySet().retainAll(bukkitOnlineIdsScratch);
     }
 
     private void scheduleFoliaRefresh(Player player) {
