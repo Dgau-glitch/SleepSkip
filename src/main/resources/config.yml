@@ -23,6 +23,7 @@ sleep:
 overlay:
   enabled: true        # master switch for all on-screen feedback (titles and bossbar)
   mode: "both"         # title, bossbar, both
+  show-to-all: false    # false = only sleeping players see overlay; true = all eligible players see it
   update-interval-ticks: 10
   fade-in-ticks: 1
   stay-ticks: 24

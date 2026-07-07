@@ -302,12 +302,23 @@ public class SleepListener implements Listener {
 
         SleepState state = getSleepState(world);
         session.updateRecipients(state.recipients());
-        // Transition UI recipients should not collapse when players wake up near finish.
-        sleepOverlayService.refreshRecipients(world, state.recipients());
+        Set<UUID> overlayRecipients = resolveActiveOverlayRecipients(session, state);
+        session.updateOverlayRecipients(overlayRecipients);
+        sleepOverlayService.refreshRecipients(world, overlayRecipients);
 
         if (!isActiveSessionStillValid(world, session, state, currentSleepTarget)) {
             cancelActiveSkip(world, session, state.recipients(), true);
         }
+    }
+
+    private Set<UUID> resolveActiveOverlayRecipients(ActiveSkipSession session, SleepState state) {
+        if (!session.isCommitted()) {
+            return Set.copyOf(state.overlayRecipients());
+        }
+
+        Set<UUID> overlayRecipients = new LinkedHashSet<>(session.overlayRecipients());
+        overlayRecipients.addAll(state.overlayRecipients());
+        return overlayRecipients;
     }
 
     private boolean isActiveSessionStillValid(
@@ -392,13 +403,14 @@ public class SleepListener implements Listener {
     }
 
     private void startSkip(World world, SleepState state, SleepTimingRules.SleepTarget sleepTarget) {
-        startSkip(world, sleepTarget, state.recipients(), state.sleepingPlayers(), state.requiredPlayers(), false);
+        startSkip(world, sleepTarget, state.recipients(), state.overlayRecipients(), state.sleepingPlayers(), state.requiredPlayers(), false);
     }
 
     private void startSkip(
             World world,
             SleepTimingRules.SleepTarget sleepTarget,
             Collection<UUID> recipients,
+            Collection<UUID> overlayRecipients,
             int sleepingPlayers,
             int requiredPlayers,
             boolean forced
@@ -417,6 +429,7 @@ public class SleepListener implements Listener {
                 worldId,
                 sleepTarget,
                 Set.copyOf(recipients),
+                Set.copyOf(overlayRecipients),
                 collectWorldSleepers(world),
                 previousSleepingPercentage,
                 transitionDurationTicks,
@@ -455,6 +468,7 @@ public class SleepListener implements Listener {
                         + ",transitionTicks=" + transitionDurationTicks
                         + ",completionDelayTicks=" + completionDelayTicks
                         + ",recipients=" + recipients.size()
+                        + ",overlayRecipients=" + overlayRecipients.size()
         );
 
         String startMessage = sleepTarget == SleepTimingRules.SleepTarget.NIGHT
@@ -464,7 +478,7 @@ public class SleepListener implements Listener {
         sleepOverlayService.startTransition(
                 world,
                 sleepTarget,
-                Set.copyOf(recipients),
+                Set.copyOf(overlayRecipients),
                 sleepingPlayers,
                 requiredPlayers,
                 transitionDurationTicks
@@ -514,7 +528,9 @@ public class SleepListener implements Listener {
 
         SleepState state = getSleepState(world);
         session.updateRecipients(state.recipients());
-        sleepOverlayService.refreshRecipients(world, state.recipients());
+        Set<UUID> overlayRecipients = resolveActiveOverlayRecipients(session, state);
+        session.updateOverlayRecipients(overlayRecipients);
+        sleepOverlayService.refreshRecipients(world, overlayRecipients);
 
         SleepTimingRules.SleepTarget currentSleepTarget = getSleepTarget(world);
         if (!isActiveSessionStillValid(world, session, state, currentSleepTarget)) {
@@ -1232,6 +1248,7 @@ public class SleepListener implements Listener {
                 world,
                 sleepTarget,
                 collectWorldRecipients(world),
+                state.overlayRecipients(),
                 state.sleepingPlayers(),
                 Math.max(1, state.requiredPlayers()),
                 true

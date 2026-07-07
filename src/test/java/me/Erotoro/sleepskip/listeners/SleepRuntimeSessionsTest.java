@@ -24,6 +24,7 @@ class SleepRuntimeSessionsTest {
                 worldId,
                 SleepTimingRules.SleepTarget.NIGHT,
                 List.of(recipientId),
+                List.of(sleeperId),
                 sleepers,
                 null,
                 100,

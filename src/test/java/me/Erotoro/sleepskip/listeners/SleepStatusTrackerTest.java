@@ -134,4 +134,84 @@ class SleepStatusTrackerTest {
         assertEquals(1, afterReset.sleepingPlayers());
         assertEquals(List.of(playerId), List.copyOf(afterReset.overlayRecipients()));
     }
+
+    @Test
+    void overlayRecipientsDefaultToSleepingPlayersOnly() {
+        UUID worldId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        UUID sleepingPlayerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        UUID awakePlayerId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+
+        SleepSkip plugin = mock(SleepSkip.class);
+        PlayerStateService playerStateService = mock(PlayerStateService.class);
+        World world = mock(World.class);
+        FileConfiguration config = baseSleepConfig();
+        config.set("overlay.show-to-all", false);
+
+        when(plugin.getConfig()).thenReturn(config);
+        when(world.getUID()).thenReturn(worldId);
+        when(playerStateService.getSnapshots()).thenReturn(List.of(
+                snapshot(sleepingPlayerId, worldId, true),
+                snapshot(awakePlayerId, worldId, false)
+        ));
+
+        SleepStatusTracker tracker = new SleepStatusTracker(plugin, playerStateService, new PlayerEligibilityService());
+        tracker.markSleeping(sleepingPlayerId);
+
+        SleepRuntimeSessions.SleepState state = tracker.getSleepState(world, true, true, 0L);
+
+        assertEquals(List.of(sleepingPlayerId, awakePlayerId), List.copyOf(state.recipients()));
+        assertEquals(List.of(sleepingPlayerId), List.copyOf(state.overlayRecipients()));
+    }
+
+    @Test
+    void overlayRecipientsCanIncludeAllEligiblePlayers() {
+        UUID worldId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        UUID sleepingPlayerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        UUID awakePlayerId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+
+        SleepSkip plugin = mock(SleepSkip.class);
+        PlayerStateService playerStateService = mock(PlayerStateService.class);
+        World world = mock(World.class);
+        FileConfiguration config = baseSleepConfig();
+        config.set("overlay.show-to-all", true);
+
+        when(plugin.getConfig()).thenReturn(config);
+        when(world.getUID()).thenReturn(worldId);
+        when(playerStateService.getSnapshots()).thenReturn(List.of(
+                snapshot(sleepingPlayerId, worldId, true),
+                snapshot(awakePlayerId, worldId, false)
+        ));
+
+        SleepStatusTracker tracker = new SleepStatusTracker(plugin, playerStateService, new PlayerEligibilityService());
+        tracker.markSleeping(sleepingPlayerId);
+
+        SleepRuntimeSessions.SleepState state = tracker.getSleepState(world, true, true, 0L);
+
+        assertEquals(List.of(sleepingPlayerId, awakePlayerId), List.copyOf(state.recipients()));
+        assertEquals(List.of(sleepingPlayerId, awakePlayerId), List.copyOf(state.overlayRecipients()));
+    }
+
+    private static FileConfiguration baseSleepConfig() {
+        FileConfiguration config = new YamlConfiguration();
+        config.set("settings.per-world", false);
+        config.set("settings.ignore-afk", true);
+        config.set("settings.required-type", "percent");
+        config.set("settings.required-value", 50D);
+        return config;
+    }
+
+    private static PlayerStateSnapshot snapshot(UUID playerId, UUID worldId, boolean sleeping) {
+        return new PlayerStateSnapshot(
+                playerId,
+                worldId,
+                true,
+                false,
+                false,
+                false,
+                false,
+                false,
+                sleeping
+        );
+    }
+
 }
