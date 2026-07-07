@@ -8,6 +8,7 @@ import me.Erotoro.sleepskip.api.event.SleepSkipStartEvent;
 import me.Erotoro.sleepskip.services.DayCounterService;
 import me.Erotoro.sleepskip.services.PlayerEligibilityService;
 import me.Erotoro.sleepskip.services.PlayerStateService;
+import me.Erotoro.sleepskip.services.PhantomRestService;
 import me.Erotoro.sleepskip.services.SleepOverlayService;
 import me.Erotoro.sleepskip.listeners.SleepRuntimeSessions.ActiveNightAccelerationSession;
 import me.Erotoro.sleepskip.listeners.SleepRuntimeSessions.ActiveSkipSession;
@@ -20,7 +21,6 @@ import me.Erotoro.sleepskip.util.SleepTimingRules;
 import me.Erotoro.sleepskip.utils.ActionBar;
 import org.bukkit.Bukkit;
 import org.bukkit.GameRule;
-import org.bukkit.Statistic;
 import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
@@ -56,6 +56,7 @@ public class SleepListener implements Listener {
     private final SleepSkip plugin;
     private final PlayerStateService playerStateService;
     private final SleepOverlayService sleepOverlayService;
+    private final PhantomRestService phantomRestService;
     private final DayCounterService dayCounterService;
     private final SleepRuleConfig ruleConfig;
     private final SleepStatusTracker statusTracker;
@@ -70,6 +71,7 @@ public class SleepListener implements Listener {
         this.plugin = plugin;
         this.playerStateService = playerStateService;
         this.sleepOverlayService = sleepOverlayService;
+        this.phantomRestService = new PhantomRestService(plugin);
         this.dayCounterService = plugin.getDayCounterService();
         this.ruleConfig = new SleepRuleConfig(plugin);
         this.statusTracker = new SleepStatusTracker(plugin, playerStateService, new PlayerEligibilityService());
@@ -91,6 +93,7 @@ public class SleepListener implements Listener {
 
         playerStateService.refreshNow(player);
         statusTracker.markSleeping(player.getUniqueId());
+        phantomRestService.resetRestTimer(player);
         statusTracker.invalidate(world);
 
         if (sleepTarget == SleepTimingRules.SleepTarget.WEATHER) {
@@ -141,6 +144,7 @@ public class SleepListener implements Listener {
 
         if (ruleConfig.canForceSleepDuringThunderstorm(world) && player.sleep(event.getClickedBlock().getLocation(), true)) {
             statusTracker.markSleeping(player.getUniqueId());
+            phantomRestService.resetRestTimer(player);
             playerStateService.refreshNow(player);
             statusTracker.invalidate(world);
             scheduleDelayedWeatherSleepUpdate(player);
@@ -642,16 +646,6 @@ public class SleepListener implements Listener {
         sendConfiguredMessage(world, state.recipients(), message);
     }
 
-    private void resetPhantomTimerForWorld(World world) {
-        for (Player player : world.getPlayers()) {
-            PlatformScheduler.runForPlayer(plugin, player, () -> {
-                if (player.isOnline() && player.getWorld().equals(world)) {
-                    player.setStatistic(Statistic.TIME_SINCE_REST, 0);
-                }
-            });
-        }
-    }
-
     private PlatformScheduler.TaskHandle scheduleSkipFinish(World world, ActiveSkipSession session) {
         Runnable finish = () -> {
             ActiveSkipSession current = activeSkipSessions.get(world.getUID());
@@ -681,7 +675,7 @@ public class SleepListener implements Listener {
                 if (!hasDayAdvancedSinceSkipStarted(session.startedDayIndex(), currentDayIndex(world))) {
                     applyConfiguredMorningTime(world);
                 }
-                resetPhantomTimerForWorld(world);
+                phantomRestService.resetRestTimers(world, sleepers);
                 SleepSkip.incrementNightsSkipped();
             }
 
@@ -1261,7 +1255,7 @@ public class SleepListener implements Listener {
         if (sleepTarget == SleepTimingRules.SleepTarget.NIGHT) {
             long targetTime = Math.max(0L, Math.min(23999L, plugin.getConfig().getLong("settings.daytime-ticks", 0L)));
             world.setFullTime(resolveNextMorningFullTime(world.getFullTime(), world.getTime(), targetTime));
-            resetPhantomTimerForWorld(world);
+            phantomRestService.resetRestTimers(world, sleepers);
             SleepSkip.incrementNightsSkipped();
             if (dayCounterService.isEnabled()) {
                 dayCounterService.scheduleSleepSkipMorningAnnouncement(world, state.overlayRecipients());
