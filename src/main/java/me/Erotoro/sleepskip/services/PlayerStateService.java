@@ -2,7 +2,6 @@ package me.Erotoro.sleepskip.services;
 
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import me.Erotoro.sleepskip.SleepSkip;
-import me.Erotoro.sleepskip.afk.AFKChecker;
 import me.Erotoro.sleepskip.hooks.ExternalPluginHooks;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
@@ -31,14 +30,12 @@ public class PlayerStateService implements Listener {
     private static final long REFRESH_PERIOD_TICKS = 20L;
 
     private final SleepSkip plugin;
-    private final AFKChecker afkChecker;
     private final ExternalPluginHooks externalPluginHooks;
     private final ConcurrentHashMap<UUID, PlayerStateSnapshot> snapshots = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, ScheduledTask> foliaTasks = new ConcurrentHashMap<>();
 
-    public PlayerStateService(SleepSkip plugin, AFKChecker afkChecker, ExternalPluginHooks externalPluginHooks) {
+    public PlayerStateService(SleepSkip plugin, ExternalPluginHooks externalPluginHooks) {
         this.plugin = plugin;
-        this.afkChecker = afkChecker;
         this.externalPluginHooks = externalPluginHooks;
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
@@ -122,8 +119,7 @@ public class PlayerStateService implements Listener {
         }
 
         boolean ignoreAfk = plugin.getConfig().getBoolean("settings.ignore-afk", true);
-        boolean localAfk = afkChecker.isPlayerAFK(player);
-        boolean externalAfk = externalPluginHooks.isAfk(player);
+        boolean survivalTweaksAfk = externalPluginHooks.isAfk(player);
         World world = player.getWorld();
         snapshots.put(player.getUniqueId(), new PlayerStateSnapshot(
                 player.getUniqueId(),
@@ -133,7 +129,7 @@ public class PlayerStateService implements Listener {
                 player.getGameMode() == GameMode.SPECTATOR,
                 player.hasMetadata("NPC"),
                 externalPluginHooks.isVanished(player),
-                resolveAfkFlag(ignoreAfk, localAfk, externalAfk),
+                resolveAfkFlag(ignoreAfk, survivalTweaksAfk),
                 player.isSleeping(),
                 resolveSleepWeight(player)
         ));
@@ -170,11 +166,8 @@ public class PlayerStateService implements Listener {
         return weight;
     }
 
-    static boolean resolveAfkFlag(boolean ignoreAfk, boolean localAfk, boolean externalAfk) {
-        if (!ignoreAfk) {
-            return false;
-        }
-        return localAfk || externalAfk;
+    static boolean resolveAfkFlag(boolean ignoreAfk, boolean survivalTweaksAfk) {
+        return ignoreAfk && survivalTweaksAfk;
     }
 
     private void removePlayer(UUID playerId) {

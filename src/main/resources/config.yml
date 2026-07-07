@@ -4,7 +4,6 @@ settings:
   required-value: 60
 
   ignore-afk: true
-  afk-timeout: 300
   count-afk-sleepers: true
 
   actionbar-duration: 5

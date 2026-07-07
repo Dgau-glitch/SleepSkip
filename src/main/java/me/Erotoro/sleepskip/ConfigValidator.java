@@ -197,16 +197,6 @@ public final class ConfigValidator {
             changed = true;
         }
 
-        long afkTimeout = config.getLong("settings.afk-timeout", 300L);
-        if (afkTimeout < 0L) {
-            plugin.getLogger().warning(plugin.tr(
-                    "logs.invalid-afk-timeout",
-                    "afk-timeout must not be negative. Falling back to 300."
-            ));
-            config.set("settings.afk-timeout", 300L);
-            changed = true;
-        }
-
         int daytimeTicks = config.getInt("settings.daytime-ticks", 0);
         int normalizedDaytimeTicks = Math.max(0, Math.min(23999, daytimeTicks));
         if (daytimeTicks != normalizedDaytimeTicks) {

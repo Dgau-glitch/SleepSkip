@@ -6,12 +6,11 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 
 import java.lang.reflect.Method;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Optional integrations for vanish/AFK providers and conflict reporting.
+ * Optional integrations for third-party player-state providers and conflict reporting.
  */
 public class ExternalPluginHooks {
 
@@ -26,6 +25,7 @@ public class ExternalPluginHooks {
     private final SleepSkip plugin;
     private final Plugin essentialsPlugin;
     private final Plugin cmiPlugin;
+    private final SurvivalTweaksAfkHook survivalTweaksAfkHook;
     private final Set<String> reflectionWarnings = ConcurrentHashMap.newKeySet();
 
     public ExternalPluginHooks(SleepSkip plugin) {
@@ -33,20 +33,33 @@ public class ExternalPluginHooks {
         PluginManager pluginManager = plugin.getServer().getPluginManager();
         this.essentialsPlugin = pluginManager.getPlugin("Essentials");
         this.cmiPlugin = pluginManager.getPlugin("CMI");
+        this.survivalTweaksAfkHook = new SurvivalTweaksAfkHook(pluginManager.getPlugin("SurvivalTweaks"), this::warnOnce);
     }
 
     public void logDetectedHooks() {
         if (essentialsPlugin != null && essentialsPlugin.isEnabled()) {
             plugin.getLogger().info(plugin.tr(
                     "logs.hook-essentials",
-                    "Hooked into Essentials for vanish/AFK detection."
+                    "Hooked into Essentials for vanish detection."
             ));
         }
 
         if (cmiPlugin != null && cmiPlugin.isEnabled()) {
             plugin.getLogger().info(plugin.tr(
                     "logs.hook-cmi",
-                    "Hooked into CMI for vanish/AFK detection."
+                    "Hooked into CMI for vanish detection."
+            ));
+        }
+
+        if (survivalTweaksAfkHook.isAvailable()) {
+            plugin.getLogger().info(plugin.tr(
+                    "logs.hook-survivaltweaks",
+                    "Hooked into SurvivalTweaks for AFK detection."
+            ));
+        } else {
+            plugin.getLogger().warning(plugin.tr(
+                    "logs.missing-survivaltweaks",
+                    "SurvivalTweaks is not installed or enabled; AFK players will not be excluded by SleepSkip."
             ));
         }
     }
@@ -71,8 +84,7 @@ public class ExternalPluginHooks {
     }
 
     public boolean isAfk(Player player) {
-        return invokeUserBoolean(essentialsPlugin, "getUser", player, "isAfk")
-                || isCmiBoolean(player, "isAfk");
+        return survivalTweaksAfkHook.isAfk(player);
     }
 
     private boolean invokeUserBoolean(Plugin sourcePlugin, String userMethod, Player player, String booleanMethod) {
@@ -109,6 +121,7 @@ public class ExternalPluginHooks {
         return false;
     }
 
+
     private Object invoke(Object target, String methodName, Object... args) {
         if (target == null) {
             return null;
@@ -117,6 +130,8 @@ public class ExternalPluginHooks {
         try {
             Method method = target.getClass().getMethod(methodName);
             return method.invoke(target, args);
+        } catch (NoSuchMethodException exception) {
+            return null;
         } catch (ReflectiveOperationException exception) {
             warnOnce(target.getClass().getName() + "#" + methodName,
                     "Failed to invoke hook method " + target.getClass().getName() + "#" + methodName + ": " + exception.getClass().getSimpleName());
@@ -132,6 +147,8 @@ public class ExternalPluginHooks {
         try {
             Method method = target.getClass().getMethod(methodName, parameterTypes);
             return method.invoke(target, args);
+        } catch (NoSuchMethodException exception) {
+            return null;
         } catch (ReflectiveOperationException exception) {
             warnOnce(target.getClass().getName() + "#" + methodName,
                     "Failed to invoke hook method " + target.getClass().getName() + "#" + methodName + ": " + exception.getClass().getSimpleName());
@@ -144,6 +161,8 @@ public class ExternalPluginHooks {
             Class<?> clazz = Class.forName(className);
             Method method = clazz.getMethod(methodName);
             return method.invoke(null);
+        } catch (ClassNotFoundException | NoSuchMethodException exception) {
+            return null;
         } catch (ReflectiveOperationException exception) {
             warnOnce(className + "#" + methodName,
                     "Failed to invoke hook method " + className + "#" + methodName + ": " + exception.getClass().getSimpleName());
