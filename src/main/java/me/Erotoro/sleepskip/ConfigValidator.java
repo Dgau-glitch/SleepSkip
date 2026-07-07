@@ -84,6 +84,19 @@ public final class ConfigValidator {
             changed = true;
         }
 
+        if (config.contains("overlay.show-to-all")) {
+            boolean legacyShowToAll = config.getBoolean("overlay.show-to-all", false);
+            if (!config.contains("overlay.title.show-to-all")) {
+                config.set("overlay.title.show-to-all", legacyShowToAll);
+            }
+            if (!config.contains("overlay.bossbar.show-to-all")) {
+                config.set("overlay.bossbar.show-to-all", legacyShowToAll);
+            }
+            config.set("overlay.show-to-all", null);
+            changed = true;
+            plugin.getLogger().warning("overlay.show-to-all is deprecated. Migrated to overlay.title.show-to-all and overlay.bossbar.show-to-all.");
+        }
+
         String overlayMode = normalizedString(config, "overlay.mode", "both");
         if (!SUPPORTED_OVERLAY_MODES.contains(overlayMode)) {
             plugin.getLogger().warning("overlay.mode must be one of: title, bossbar, both. Falling back to both.");
@@ -181,16 +194,6 @@ public final class ConfigValidator {
                     "actionbar-duration must be between 1 and 30."
             ));
             config.set("settings.actionbar-duration", normalizedActionBarDuration);
-            changed = true;
-        }
-
-        long afkTimeout = config.getLong("settings.afk-timeout", 300L);
-        if (afkTimeout < 0L) {
-            plugin.getLogger().warning(plugin.tr(
-                    "logs.invalid-afk-timeout",
-                    "afk-timeout must not be negative. Falling back to 300."
-            ));
-            config.set("settings.afk-timeout", 300L);
             changed = true;
         }
 

@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -61,6 +62,9 @@ public class SleepOverlayService {
     // Explicit per-player visibility preferences (absent = use overlay.bossbar.default-visible).
     private final ConcurrentHashMap<UUID, Boolean> bossBarPreferences = new ConcurrentHashMap<>();
     private final File bossBarPreferencesFile;
+    private static final long BOSSBAR_PREFERENCES_SAVE_DEBOUNCE_TICKS = 20L;
+
+    private PlatformScheduler.TaskHandle pendingBossBarPreferencesSave = () -> { };
 
     public SleepOverlayService(SleepSkip plugin) {
         this.plugin = plugin;
@@ -72,7 +76,8 @@ public class SleepOverlayService {
     public void showStatus(
             World world,
             SleepTimingRules.SleepTarget sleepTarget,
-            Collection<UUID> recipients,
+            Collection<UUID> titleRecipients,
+            Collection<UUID> bossBarRecipients,
             int sleeping,
             int needed
     ) {
@@ -80,7 +85,7 @@ public class SleepOverlayService {
             stopAll();
             return;
         }
-        if (sleeping <= 0 || recipients.isEmpty() || sleepTarget == SleepTimingRules.SleepTarget.NONE) {
+        if (sleeping <= 0 || areOverlayRecipientsEmpty(titleRecipients, bossBarRecipients) || sleepTarget == SleepTimingRules.SleepTarget.NONE) {
             stop(world);
             return;
         }
@@ -88,7 +93,8 @@ public class SleepOverlayService {
         startSession(
                 new OverlayDescriptor(
                         scope(world),
-                        Set.copyOf(recipients),
+                        Set.copyOf(titleRecipients),
+                        Set.copyOf(bossBarRecipients),
                         OverlayPhase.STATUS,
                         sleepTarget,
                         templateFor(sleepTarget, OverlayPhase.STATUS),
@@ -104,7 +110,8 @@ public class SleepOverlayService {
     public void startTransition(
             World world,
             SleepTimingRules.SleepTarget sleepTarget,
-            Collection<UUID> recipients,
+            Collection<UUID> titleRecipients,
+            Collection<UUID> bossBarRecipients,
             int sleeping,
             int needed,
             long transitionDurationTicks
@@ -113,7 +120,7 @@ public class SleepOverlayService {
             stopAll();
             return;
         }
-        if (recipients.isEmpty() || sleepTarget == SleepTimingRules.SleepTarget.NONE) {
+        if (areOverlayRecipientsEmpty(titleRecipients, bossBarRecipients) || sleepTarget == SleepTimingRules.SleepTarget.NONE) {
             stop(world);
             return;
         }
@@ -124,13 +131,15 @@ public class SleepOverlayService {
                         + ",sleeping=" + sleeping
                         + ",needed=" + needed
                         + ",transitionDurationTicks=" + Math.max(1L, transitionDurationTicks)
-                        + ",recipients=" + recipients.size()
+                        + ",titleRecipients=" + titleRecipients.size()
+                        + ",bossBarRecipients=" + bossBarRecipients.size()
         );
 
         startSession(
                 new OverlayDescriptor(
                         scope(world),
-                        Set.copyOf(recipients),
+                        Set.copyOf(titleRecipients),
+                        Set.copyOf(bossBarRecipients),
                         OverlayPhase.TRANSITION,
                         sleepTarget,
                         templateFor(sleepTarget, OverlayPhase.TRANSITION),
@@ -145,7 +154,8 @@ public class SleepOverlayService {
 
     public void showAcceleration(
             World world,
-            Collection<UUID> recipients,
+            Collection<UUID> titleRecipients,
+            Collection<UUID> bossBarRecipients,
             int sleeping,
             int needed,
             double speedMultiplier
@@ -154,7 +164,7 @@ public class SleepOverlayService {
             stopAll();
             return;
         }
-        if (sleeping <= 0 || recipients.isEmpty()) {
+        if (sleeping <= 0 || areOverlayRecipientsEmpty(titleRecipients, bossBarRecipients)) {
             stop(world);
             return;
         }
@@ -162,7 +172,8 @@ public class SleepOverlayService {
         startSession(
                 new OverlayDescriptor(
                         scope(world),
-                        Set.copyOf(recipients),
+                        Set.copyOf(titleRecipients),
+                        Set.copyOf(bossBarRecipients),
                         OverlayPhase.ACCELERATION,
                         SleepTimingRules.SleepTarget.NIGHT,
                         templateFor(SleepTimingRules.SleepTarget.NIGHT, OverlayPhase.ACCELERATION),
@@ -197,12 +208,13 @@ public class SleepOverlayService {
         }
     }
 
-    public void refreshRecipients(World world, Collection<UUID> recipients) {
+    public void refreshRecipients(World world, Collection<UUID> titleRecipients, Collection<UUID> bossBarRecipients) {
         if (world == null) {
             return;
         }
-        Set<UUID> normalizedRecipients = recipients == null ? Set.of() : Set.copyOf(recipients);
-        refreshRecipients(scope(world).key(), normalizedRecipients);
+        Set<UUID> normalizedTitleRecipients = titleRecipients == null ? Set.of() : Set.copyOf(titleRecipients);
+        Set<UUID> normalizedBossBarRecipients = bossBarRecipients == null ? Set.of() : Set.copyOf(bossBarRecipients);
+        refreshRecipients(scope(world).key(), normalizedTitleRecipients, normalizedBossBarRecipients);
     }
 
     public void stop(World world) {
@@ -331,24 +343,25 @@ public class SleepOverlayService {
         stop(key, true, true);
     }
 
-    private synchronized void refreshRecipients(String key, Set<UUID> recipients) {
+    private synchronized void refreshRecipients(String key, Set<UUID> titleRecipients, Set<UUID> bossBarRecipients) {
         OverlaySession session = sessions.get(key);
         if (session == null) {
             return;
         }
 
         OverlayDescriptor currentDescriptor = session.descriptor();
-        if (currentDescriptor.recipients().equals(recipients)) {
+        if (currentDescriptor.titleRecipients().equals(titleRecipients)
+                && currentDescriptor.bossBarRecipients().equals(bossBarRecipients)) {
             return;
         }
 
-        clearRecipientsNoLongerTargeted(currentDescriptor.recipients(), recipients, currentDescriptor.scope(), session.token());
-        if (recipients.isEmpty()) {
+        clearRecipientsNoLongerTargeted(currentDescriptor.recipients(), combineRecipients(titleRecipients, bossBarRecipients), currentDescriptor.scope(), session.token());
+        if (areOverlayRecipientsEmpty(titleRecipients, bossBarRecipients)) {
             stop(key, false);
             return;
         }
 
-        session.updateDescriptor(currentDescriptor.withRecipients(recipients));
+        session.updateDescriptor(currentDescriptor.withRecipients(titleRecipients, bossBarRecipients));
     }
 
     private synchronized void completeTransition(String key) {
@@ -378,7 +391,7 @@ public class SleepOverlayService {
                 descriptor.scope().key(),
                 descriptor.scope(),
                 session.token(),
-                finalFrame.recipients(),
+                combineRecipients(finalFrame.titleRecipients(), finalFrame.bossBarRecipients()),
                 completionHoldTicks
         );
         logTransitionLifecycle(
@@ -386,7 +399,7 @@ public class SleepOverlayService {
                 descriptor.scope(),
                 "finalFrameSent=true,progress=100"
                         + ",holdTicks=" + completionHoldTicks
-                        + ",recipients=" + finalFrame.recipients().size()
+                        + ",recipients=" + combineRecipients(finalFrame.titleRecipients(), finalFrame.bossBarRecipients()).size()
         );
     }
 
@@ -535,7 +548,7 @@ public class SleepOverlayService {
                 descriptor.speedMultiplier()
         );
         OverlayTimings timings = resolveTimings(intervalTicks, activelyMaintained);
-        return new OverlayFrame(title, subtitle, descriptor.recipients(), progress, timings.fadeInTicks(), timings.stayTicks(), timings.fadeOutTicks());
+        return new OverlayFrame(title, subtitle, descriptor.titleRecipients(), descriptor.bossBarRecipients(), progress, timings.fadeInTicks(), timings.stayTicks(), timings.fadeOutTicks());
     }
 
     private boolean shouldIgnoreSessionStart(OverlaySession existing, OverlayDescriptor incoming) {
@@ -586,7 +599,7 @@ public class SleepOverlayService {
                 ))
                 : null;
 
-        for (UUID recipient : frame.recipients()) {
+        for (UUID recipient : combineRecipients(frame.titleRecipients(), frame.bossBarRecipients())) {
             Player player = Bukkit.getPlayer(recipient);
             if (player == null || !player.isOnline()) {
                 continue;
@@ -600,10 +613,10 @@ public class SleepOverlayService {
                     hideBossBarFor(player);
                     return;
                 }
-                if (titleMode && renderedTitle != null) {
+                if (titleMode && renderedTitle != null && frame.titleRecipients().contains(recipient)) {
                     player.showTitle(renderedTitle);
                 }
-                if (bossBarMode) {
+                if (bossBarMode && frame.bossBarRecipients().contains(recipient)) {
                     applyBossBar(player, descriptor, frame);
                 } else {
                     hideBossBarFor(player);
@@ -748,7 +761,7 @@ public class SleepOverlayService {
     /** Persists a player's personal bossbar preference and applies a hide immediately when turned off. */
     public void setBossBarVisible(UUID playerId, boolean visible) {
         bossBarPreferences.put(playerId, visible);
-        saveBossBarPreferences();
+        queueBossBarPreferencesSave();
 
         if (!visible) {
             Player player = Bukkit.getPlayer(playerId);
@@ -801,9 +814,18 @@ public class SleepOverlayService {
         }
     }
 
-    private synchronized void saveBossBarPreferences() {
+    private synchronized void queueBossBarPreferencesSave() {
+        pendingBossBarPreferencesSave.cancel();
+        pendingBossBarPreferencesSave = PlatformScheduler.runAsyncDelayed(
+                plugin,
+                () -> saveBossBarPreferencesSnapshot(Map.copyOf(bossBarPreferences)),
+                BOSSBAR_PREFERENCES_SAVE_DEBOUNCE_TICKS
+        );
+    }
+
+    private void saveBossBarPreferencesSnapshot(Map<UUID, Boolean> preferencesSnapshot) {
         YamlConfiguration config = new YamlConfiguration();
-        for (var entry : bossBarPreferences.entrySet()) {
+        for (var entry : preferencesSnapshot.entrySet()) {
             config.set("players." + entry.getKey(), entry.getValue());
         }
         try {
@@ -1051,7 +1073,8 @@ public class SleepOverlayService {
 
     private record OverlayDescriptor(
             OverlayScope scope,
-            Set<UUID> recipients,
+            Set<UUID> titleRecipients,
+            Set<UUID> bossBarRecipients,
             OverlayPhase phase,
             SleepTimingRules.SleepTarget target,
             OverlayTemplate template,
@@ -1061,20 +1084,40 @@ public class SleepOverlayService {
             long transitionDurationTicks,
             String speedMultiplier
     ) {
-        private OverlayDescriptor withRecipients(Set<UUID> recipients) {
-            return new OverlayDescriptor(scope, recipients, phase, target, template, sleeping, needed, remaining, transitionDurationTicks, speedMultiplier);
+        private Set<UUID> recipients() {
+            return combineRecipients(titleRecipients, bossBarRecipients);
+        }
+
+        private OverlayDescriptor withRecipients(Set<UUID> titleRecipients, Set<UUID> bossBarRecipients) {
+            return new OverlayDescriptor(scope, titleRecipients, bossBarRecipients, phase, target, template, sleeping, needed, remaining, transitionDurationTicks, speedMultiplier);
         }
     }
 
     private record OverlayFrame(
             String title,
             String subtitle,
-            Set<UUID> recipients,
+            Set<UUID> titleRecipients,
+            Set<UUID> bossBarRecipients,
             int progress,
             int fadeInTicks,
             int stayTicks,
             int fadeOutTicks
     ) {
+    }
+
+    private static boolean areOverlayRecipientsEmpty(Collection<UUID> titleRecipients, Collection<UUID> bossBarRecipients) {
+        return (titleRecipients == null || titleRecipients.isEmpty()) && (bossBarRecipients == null || bossBarRecipients.isEmpty());
+    }
+
+    private static Set<UUID> combineRecipients(Collection<UUID> titleRecipients, Collection<UUID> bossBarRecipients) {
+        java.util.LinkedHashSet<UUID> combined = new java.util.LinkedHashSet<>();
+        if (titleRecipients != null) {
+            combined.addAll(titleRecipients);
+        }
+        if (bossBarRecipients != null) {
+            combined.addAll(bossBarRecipients);
+        }
+        return combined;
     }
 
     private record OverlayTimings(int fadeInTicks, int stayTicks, int fadeOutTicks) {

@@ -27,10 +27,13 @@ repositories {
 }
 
 dependencies {
-    compileOnly 'dev.folia:folia-api:1.20.1-R0.1-SNAPSHOT'
+    compileOnly 'dev.folia:folia-api:1.21.11-R0.1-SNAPSHOT'
     compileOnly 'me.clip:placeholderapi:2.11.6'
+    compileOnly(fileTree('../SurvivalTweaks/build/libs') {
+        include('SurvivalTweaks*.jar')
+    })
     implementation 'org.bstats:bstats-bukkit:3.2.1'
-    testImplementation 'dev.folia:folia-api:1.20.1-R0.1-SNAPSHOT'
+    testImplementation 'dev.folia:folia-api:1.21.11-R0.1-SNAPSHOT'
     testImplementation 'me.clip:placeholderapi:2.11.6'
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -38,7 +41,7 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-def targetJavaVersion = 17
+def targetJavaVersion = 21
 java {
     def javaVersion = JavaVersion.toVersion(targetJavaVersion)
     sourceCompatibility = javaVersion
@@ -50,6 +53,7 @@ java {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xlint:deprecation']
 
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
         options.release.set(targetJavaVersion)

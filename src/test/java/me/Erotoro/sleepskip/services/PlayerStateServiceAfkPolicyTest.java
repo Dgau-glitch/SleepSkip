@@ -9,17 +9,13 @@ class PlayerStateServiceAfkPolicyTest {
 
     @Test
     void afkIsAlwaysFalseWhenIgnoreAfkDisabled() {
-        assertFalse(PlayerStateService.resolveAfkFlag(false, false, false));
-        assertFalse(PlayerStateService.resolveAfkFlag(false, true, false));
-        assertFalse(PlayerStateService.resolveAfkFlag(false, false, true));
-        assertFalse(PlayerStateService.resolveAfkFlag(false, true, true));
+        assertFalse(PlayerStateService.resolveAfkFlag(false, false));
+        assertFalse(PlayerStateService.resolveAfkFlag(false, true));
     }
 
     @Test
-    void afkIsUnionOfProvidersWhenIgnoreAfkEnabled() {
-        assertFalse(PlayerStateService.resolveAfkFlag(true, false, false));
-        assertTrue(PlayerStateService.resolveAfkFlag(true, true, false));
-        assertTrue(PlayerStateService.resolveAfkFlag(true, false, true));
-        assertTrue(PlayerStateService.resolveAfkFlag(true, true, true));
+    void afkComesOnlyFromSurvivalTweaksWhenIgnoreAfkEnabled() {
+        assertFalse(PlayerStateService.resolveAfkFlag(true, false));
+        assertTrue(PlayerStateService.resolveAfkFlag(true, true));
     }
 }

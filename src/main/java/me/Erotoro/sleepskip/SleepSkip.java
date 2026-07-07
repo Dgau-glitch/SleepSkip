@@ -1,6 +1,5 @@
 package me.Erotoro.sleepskip;
 
-import me.Erotoro.sleepskip.afk.AFKChecker;
 import me.Erotoro.sleepskip.commands.SleepCommand;
 import me.Erotoro.sleepskip.commands.SleepTabCompleter;
 import me.Erotoro.sleepskip.hooks.ExternalPluginHooks;
@@ -35,7 +34,6 @@ public class SleepSkip extends JavaPlugin {
 
     private static final AtomicInteger NIGHTS_SKIPPED_COUNT = new AtomicInteger();
 
-    private AFKChecker afkChecker;
     private LocaleManager localeManager;
     private ExternalPluginHooks externalPluginHooks;
     private PlayerStateService playerStateService;
@@ -62,11 +60,10 @@ public class SleepSkip extends JavaPlugin {
         logServerType();
         initMetrics();
 
-        afkChecker = new AFKChecker(this);
         externalPluginHooks = new ExternalPluginHooks(this);
         externalPluginHooks.logDetectedHooks();
         externalPluginHooks.logConflicts();
-        playerStateService = new PlayerStateService(this, afkChecker, externalPluginHooks);
+        playerStateService = new PlayerStateService(this, externalPluginHooks);
         playerStateService.start();
         titleSessionCoordinator = new TitleSessionCoordinator();
         morningAnnouncementService = new MorningAnnouncementService(this);
@@ -152,10 +149,6 @@ public class SleepSkip extends JavaPlugin {
 
     public static void incrementNightsSkipped() {
         NIGHTS_SKIPPED_COUNT.incrementAndGet();
-    }
-
-    public AFKChecker getAfkChecker() {
-        return afkChecker;
     }
 
     public LocaleManager getLocaleManager() {

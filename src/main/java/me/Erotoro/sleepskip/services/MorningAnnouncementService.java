@@ -6,6 +6,8 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -14,6 +16,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -380,13 +383,59 @@ public class MorningAnnouncementService {
             return null;
         }
 
-        String normalized = configured.trim().toUpperCase().replace('.', '_').replace(':', '_');
-        try {
-            return Sound.valueOf(normalized);
-        } catch (IllegalArgumentException exception) {
+        Sound sound = matchSound(configured);
+        if (sound == null) {
             plugin.getLogger().warning("Unknown morning announcement sound: " + configured);
-            return null;
         }
+        return sound;
+    }
+
+    private Sound matchSound(String configured) {
+        for (String candidate : soundKeyCandidates(configured)) {
+            NamespacedKey key = NamespacedKey.fromString(candidate);
+            if (key == null) {
+                continue;
+            }
+            Sound sound = Registry.SOUNDS.get(key);
+            if (sound != null) {
+                return sound;
+            }
+        }
+        return null;
+    }
+
+    private Set<String> soundKeyCandidates(String configured) {
+        String normalized = configured.trim().toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
+        String path = normalized.contains(":") ? normalized.substring(normalized.indexOf(':') + 1) : normalized;
+        String namespace = normalized.contains(":") ? normalized.substring(0, normalized.indexOf(':')) : "minecraft";
+
+        Set<String> candidates = new LinkedHashSet<>();
+        candidates.add(namespace + ":" + path);
+        addUnderscorePathVariants(candidates, namespace, path, 0, new StringBuilder());
+        return candidates;
+    }
+
+    private void addUnderscorePathVariants(Set<String> candidates, String namespace, String path, int index, StringBuilder current) {
+        if (index >= path.length()) {
+            candidates.add(namespace + ":" + current);
+            return;
+        }
+
+        char character = path.charAt(index);
+        if (character != '_') {
+            current.append(character);
+            addUnderscorePathVariants(candidates, namespace, path, index + 1, current);
+            current.setLength(current.length() - 1);
+            return;
+        }
+
+        current.append('_');
+        addUnderscorePathVariants(candidates, namespace, path, index + 1, current);
+        current.setLength(current.length() - 1);
+
+        current.append('.');
+        addUnderscorePathVariants(candidates, namespace, path, index + 1, current);
+        current.setLength(current.length() - 1);
     }
 
     private String configuredOrLocalized(String configPath, String localeKey, String fallback) {
