@@ -128,6 +128,7 @@ public class PlayerStateService implements Listener {
                 player.hasPermission("sleepskip.bypass"),
                 player.getGameMode() == GameMode.SPECTATOR,
                 player.hasMetadata("NPC"),
+                externalPluginHooks.isMorphed(player),
                 externalPluginHooks.isVanished(player),
                 resolveAfkFlag(ignoreAfk, survivalTweaksAfk),
                 player.isSleeping(),

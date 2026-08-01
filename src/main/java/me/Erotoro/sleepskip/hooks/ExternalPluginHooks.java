@@ -22,11 +22,13 @@ public class ExternalPluginHooks {
 
     private final SleepSkip plugin;
     private final SurvivalTweaksHook survivalTweaksHook;
+    private final MorphMobHook morphMobHook;
 
     public ExternalPluginHooks(SleepSkip plugin) {
         this.plugin = plugin;
         PluginManager pluginManager = plugin.getServer().getPluginManager();
         this.survivalTweaksHook = new SurvivalTweaksHook(pluginManager.getPlugin("SurvivalTweaks"));
+        this.morphMobHook = createMorphMobHook(pluginManager.getPlugin("MorphMob"));
     }
 
     public void logDetectedHooks() {
@@ -39,6 +41,12 @@ public class ExternalPluginHooks {
             plugin.getLogger().warning(plugin.tr(
                     "logs.missing-survivaltweaks",
                     "SurvivalTweaks is not installed or enabled; AFK and vanish players will not be excluded by SleepSkip."
+            ));
+        }
+        if (morphMobHook != null && morphMobHook.isAvailable()) {
+            plugin.getLogger().info(plugin.tr(
+                    "logs.hook-morphmob",
+                    "Hooked into MorphMob; morphed players are excluded from sleep calculations."
             ));
         }
     }
@@ -62,5 +70,24 @@ public class ExternalPluginHooks {
 
     public boolean isAfk(Player player) {
         return survivalTweaksHook.isAfk(player);
+    }
+
+    public boolean isMorphed(Player player) {
+        return morphMobHook != null && morphMobHook.isMorphed(player);
+    }
+
+    private MorphMobHook createMorphMobHook(Plugin morphMobPlugin) {
+        if (morphMobPlugin == null || !morphMobPlugin.isEnabled()) {
+            return null;
+        }
+
+        MorphMobHook hook = new MorphMobHook();
+        if (!hook.isAvailable()) {
+            plugin.getLogger().warning(plugin.tr(
+                    "logs.missing-morphmob-api",
+                    "MorphMob is enabled but its API is unavailable; morphed players cannot be excluded."
+            ));
+        }
+        return hook;
     }
 }

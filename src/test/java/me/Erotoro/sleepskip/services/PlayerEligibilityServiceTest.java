@@ -43,6 +43,16 @@ class PlayerEligibilityServiceTest {
         assertTrue(service.shouldCountAsSleeping(snapshot, WORLD_ID, false, true, true));
     }
 
+    @Test
+    void morphedPlayersAreExcludedFromActiveAndSleepingCounts() {
+        PlayerStateSnapshot snapshot = new PlayerStateSnapshot(
+                PLAYER_ID, WORLD_ID, true, false, false, false, true, false, false, true, 1
+        );
+
+        assertFalse(service.shouldCountAsActive(snapshot, WORLD_ID, false, false));
+        assertFalse(service.shouldCountAsSleeping(snapshot, WORLD_ID, false, true, false));
+    }
+
     private PlayerStateSnapshot snapshot(boolean afk, boolean sleeping) {
         return new PlayerStateSnapshot(
                 PLAYER_ID,

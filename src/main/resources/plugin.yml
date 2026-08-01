@@ -4,7 +4,7 @@ main: me.Erotoro.sleepskip.SleepSkip
 api-version: '1.20'
 folia-supported: true
 depend: [SurvivalTweaks]
-softdepend: [PlaceholderAPI]
+softdepend: [PlaceholderAPI, MorphMob]
 authors: [Erotoro]
 description: SleepSkipUltra - smooth night skipping with acceleration, overlay UI, bossbar, and Paper/Folia 1.20.1+ support
 commands:
