@@ -80,29 +80,24 @@ public class SleepListener implements Listener {
 
     @EventHandler
     public void onPlayerSleep(PlayerBedEnterEvent event) {
-        if (event.isCancelled()) {
-            return;
-        }
-
         Player player = event.getPlayer();
         World world = player.getWorld();
         SleepTimingRules.SleepTarget sleepTarget = getSleepTarget(world);
         if (!ruleConfig.isOverworld(world) || sleepTarget == SleepTimingRules.SleepTarget.NONE) {
             return;
         }
-
-        playerStateService.refreshNow(player);
-        statusTracker.markSleeping(player.getUniqueId());
-        phantomRestService.resetRestTimer(player);
-        statusTracker.invalidate(world);
-
-        if (sleepTarget == SleepTimingRules.SleepTarget.WEATHER) {
-            scheduleDelayedWeatherSleepUpdate(player);
+        if (event.isCancelled()) {
+            statusTracker.unmarkSleeping(player.getUniqueId());
+            playerStateService.refreshNow(player);
+            statusTracker.invalidate(world);
+            scheduleSleepStateUpdate(world);
             return;
         }
 
-        ensureVanillaSleepSkipSuppressed(world);
-        scheduleSleepStateUpdate(world);
+        if (sleepTarget == SleepTimingRules.SleepTarget.NIGHT) {
+            ensureVanillaSleepSkipSuppressed(world);
+        }
+        scheduleConfirmedSleepUpdate(player, sleepTarget);
     }
 
     @EventHandler
@@ -143,11 +138,7 @@ public class SleepListener implements Listener {
         }
 
         if (ruleConfig.canForceSleepDuringThunderstorm(world) && player.sleep(event.getClickedBlock().getLocation(), true)) {
-            statusTracker.markSleeping(player.getUniqueId());
-            phantomRestService.resetRestTimer(player);
-            playerStateService.refreshNow(player);
-            statusTracker.invalidate(world);
-            scheduleDelayedWeatherSleepUpdate(player);
+            scheduleConfirmedSleepUpdate(player, SleepTimingRules.SleepTarget.WEATHER);
         }
     }
 
@@ -167,14 +158,26 @@ public class SleepListener implements Listener {
         scheduleSleepStateUpdate(player.getWorld());
     }
 
-    private void scheduleDelayedWeatherSleepUpdate(Player player) {
+    private void scheduleConfirmedSleepUpdate(Player player, SleepTimingRules.SleepTarget sleepTarget) {
         PlatformScheduler.runForPlayerDelayed(plugin, player, () -> {
-            if (player.isOnline() && player.isSleeping()) {
+            if (!player.isOnline() || !player.isSleeping()) {
+                statusTracker.unmarkSleeping(player.getUniqueId());
                 playerStateService.refreshNow(player);
                 statusTracker.invalidate(player.getWorld());
                 scheduleSleepStateUpdate(player.getWorld());
+                return;
             }
-        }, WEATHER_SLEEP_CHECK_DELAY_TICKS);
+
+            statusTracker.markSleeping(player.getUniqueId());
+            phantomRestService.resetRestTimer(player);
+            playerStateService.refreshNow(player);
+            statusTracker.invalidate(player.getWorld());
+            scheduleSleepStateUpdate(player.getWorld());
+        }, confirmedSleepDelayTicks(sleepTarget));
+    }
+
+    private long confirmedSleepDelayTicks(SleepTimingRules.SleepTarget sleepTarget) {
+        return sleepTarget == SleepTimingRules.SleepTarget.WEATHER ? WEATHER_SLEEP_CHECK_DELAY_TICKS : 1L;
     }
 
     private SleepTimingRules.SleepTarget getSleepTarget(World world) {

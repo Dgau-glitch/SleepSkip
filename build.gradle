@@ -32,6 +32,9 @@ dependencies {
     compileOnly(fileTree('../SurvivalTweaks/build/libs') {
         include('SurvivalTweaks*.jar')
     })
+    compileOnly(fileTree('../MorphMob/build/libs') {
+        include('MorphMob*.jar')
+    })
     implementation 'org.bstats:bstats-bukkit:3.2.1'
     testImplementation 'dev.folia:folia-api:1.21.11-R0.1-SNAPSHOT'
     testImplementation 'me.clip:placeholderapi:2.11.6'

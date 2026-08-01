@@ -5,9 +5,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 
-import java.lang.reflect.Method;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Optional integrations for third-party player-state providers and conflict reporting.
@@ -23,43 +21,32 @@ public class ExternalPluginHooks {
     );
 
     private final SleepSkip plugin;
-    private final Plugin essentialsPlugin;
-    private final Plugin cmiPlugin;
-    private final SurvivalTweaksAfkHook survivalTweaksAfkHook;
-    private final Set<String> reflectionWarnings = ConcurrentHashMap.newKeySet();
+    private final SurvivalTweaksHook survivalTweaksHook;
+    private final MorphMobHook morphMobHook;
 
     public ExternalPluginHooks(SleepSkip plugin) {
         this.plugin = plugin;
         PluginManager pluginManager = plugin.getServer().getPluginManager();
-        this.essentialsPlugin = pluginManager.getPlugin("Essentials");
-        this.cmiPlugin = pluginManager.getPlugin("CMI");
-        this.survivalTweaksAfkHook = new SurvivalTweaksAfkHook(pluginManager.getPlugin("SurvivalTweaks"), this::warnOnce);
+        this.survivalTweaksHook = new SurvivalTweaksHook(pluginManager.getPlugin("SurvivalTweaks"));
+        this.morphMobHook = createMorphMobHook(pluginManager.getPlugin("MorphMob"));
     }
 
     public void logDetectedHooks() {
-        if (essentialsPlugin != null && essentialsPlugin.isEnabled()) {
-            plugin.getLogger().info(plugin.tr(
-                    "logs.hook-essentials",
-                    "Hooked into Essentials for vanish detection."
-            ));
-        }
-
-        if (cmiPlugin != null && cmiPlugin.isEnabled()) {
-            plugin.getLogger().info(plugin.tr(
-                    "logs.hook-cmi",
-                    "Hooked into CMI for vanish detection."
-            ));
-        }
-
-        if (survivalTweaksAfkHook.isAvailable()) {
+        if (survivalTweaksHook.isAvailable()) {
             plugin.getLogger().info(plugin.tr(
                     "logs.hook-survivaltweaks",
-                    "Hooked into SurvivalTweaks for AFK detection."
+                    "Hooked into SurvivalTweaks for AFK and vanish detection."
             ));
         } else {
             plugin.getLogger().warning(plugin.tr(
                     "logs.missing-survivaltweaks",
-                    "SurvivalTweaks is not installed or enabled; AFK players will not be excluded by SleepSkip."
+                    "SurvivalTweaks is not installed or enabled; AFK and vanish players will not be excluded by SleepSkip."
+            ));
+        }
+        if (morphMobHook != null && morphMobHook.isAvailable()) {
+            plugin.getLogger().info(plugin.tr(
+                    "logs.hook-morphmob",
+                    "Hooked into MorphMob; morphed players are excluded from sleep calculations."
             ));
         }
     }
@@ -78,101 +65,29 @@ public class ExternalPluginHooks {
     }
 
     public boolean isVanished(Player player) {
-        return hasTruthyMetadata(player, "vanished")
-                || invokeUserBoolean(essentialsPlugin, "getUser", player, "isVanished")
-                || isCmiBoolean(player, "isVanished");
+        return survivalTweaksHook.isVanished(player);
     }
 
     public boolean isAfk(Player player) {
-        return survivalTweaksAfkHook.isAfk(player);
+        return survivalTweaksHook.isAfk(player);
     }
 
-    private boolean invokeUserBoolean(Plugin sourcePlugin, String userMethod, Player player, String booleanMethod) {
-        if (sourcePlugin == null || !sourcePlugin.isEnabled()) {
-            return false;
-        }
-
-        Object user = invokeExact(sourcePlugin, userMethod, new Class<?>[]{Player.class}, player);
-        return user != null && Boolean.TRUE.equals(invoke(user, booleanMethod));
+    public boolean isMorphed(Player player) {
+        return morphMobHook != null && morphMobHook.isMorphed(player);
     }
 
-    private boolean isCmiBoolean(Player player, String methodName) {
-        if (cmiPlugin == null || !cmiPlugin.isEnabled()) {
-            return false;
-        }
-
-        Object cmiInstance = invokeStatic("com.Zrips.CMI.CMI", "getInstance");
-        Object playerManager = cmiInstance == null ? null : invoke(cmiInstance, "getPlayerManager");
-        Object user = playerManager == null ? null : invokeExact(playerManager, "getUser", new Class<?>[]{Player.class}, player);
-        return user != null && Boolean.TRUE.equals(invoke(user, methodName));
-    }
-
-    private boolean hasTruthyMetadata(Player player, String key) {
-        Object metadata = invokeExact(player, "getMetadata", new Class<?>[]{String.class}, key);
-        if (!(metadata instanceof Iterable<?> values)) {
-            return false;
-        }
-
-        for (Object value : values) {
-            if (Boolean.TRUE.equals(invoke(value, "asBoolean"))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-
-    private Object invoke(Object target, String methodName, Object... args) {
-        if (target == null) {
+    private MorphMobHook createMorphMobHook(Plugin morphMobPlugin) {
+        if (morphMobPlugin == null || !morphMobPlugin.isEnabled()) {
             return null;
         }
 
-        try {
-            Method method = target.getClass().getMethod(methodName);
-            return method.invoke(target, args);
-        } catch (NoSuchMethodException exception) {
-            return null;
-        } catch (ReflectiveOperationException exception) {
-            warnOnce(target.getClass().getName() + "#" + methodName,
-                    "Failed to invoke hook method " + target.getClass().getName() + "#" + methodName + ": " + exception.getClass().getSimpleName());
-            return null;
+        MorphMobHook hook = new MorphMobHook();
+        if (!hook.isAvailable()) {
+            plugin.getLogger().warning(plugin.tr(
+                    "logs.missing-morphmob-api",
+                    "MorphMob is enabled but its API is unavailable; morphed players cannot be excluded."
+            ));
         }
-    }
-
-    private Object invokeExact(Object target, String methodName, Class<?>[] parameterTypes, Object... args) {
-        if (target == null) {
-            return null;
-        }
-
-        try {
-            Method method = target.getClass().getMethod(methodName, parameterTypes);
-            return method.invoke(target, args);
-        } catch (NoSuchMethodException exception) {
-            return null;
-        } catch (ReflectiveOperationException exception) {
-            warnOnce(target.getClass().getName() + "#" + methodName,
-                    "Failed to invoke hook method " + target.getClass().getName() + "#" + methodName + ": " + exception.getClass().getSimpleName());
-            return null;
-        }
-    }
-
-    private Object invokeStatic(String className, String methodName) {
-        try {
-            Class<?> clazz = Class.forName(className);
-            Method method = clazz.getMethod(methodName);
-            return method.invoke(null);
-        } catch (ClassNotFoundException | NoSuchMethodException exception) {
-            return null;
-        } catch (ReflectiveOperationException exception) {
-            warnOnce(className + "#" + methodName,
-                    "Failed to invoke hook method " + className + "#" + methodName + ": " + exception.getClass().getSimpleName());
-            return null;
-        }
-    }
-
-    private void warnOnce(String key, String message) {
-        if (reflectionWarnings.add(key)) {
-            plugin.getLogger().warning(message);
-        }
+        return hook;
     }
 }

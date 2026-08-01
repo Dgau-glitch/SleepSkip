@@ -47,7 +47,8 @@ public class PlayerEligibilityService {
         if (perWorld && !snapshot.worldId().equals(targetWorldId)) {
             return false;
         }
-        if (snapshot.bypass() || snapshot.spectator() || snapshot.npc() || snapshot.vanished()) {
+        if (snapshot.bypass() || snapshot.spectator() || snapshot.npc()
+                || snapshot.morphed() || snapshot.vanished()) {
             return false;
         }
         return true;

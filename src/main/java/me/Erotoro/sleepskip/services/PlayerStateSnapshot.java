@@ -15,6 +15,7 @@ public record PlayerStateSnapshot(
         boolean bypass,
         boolean spectator,
         boolean npc,
+        boolean morphed,
         boolean vanished,
         boolean afk,
         boolean sleeping,
@@ -33,6 +34,22 @@ public record PlayerStateSnapshot(
             boolean afk,
             boolean sleeping
     ) {
-        this(playerId, worldId, overworld, bypass, spectator, npc, vanished, afk, sleeping, 1);
+        this(playerId, worldId, overworld, bypass, spectator, npc, false, vanished, afk, sleeping, 1);
+    }
+
+    /** Backwards-compatible weighted constructor for callers predating MorphMob integration. */
+    public PlayerStateSnapshot(
+            UUID playerId,
+            UUID worldId,
+            boolean overworld,
+            boolean bypass,
+            boolean spectator,
+            boolean npc,
+            boolean vanished,
+            boolean afk,
+            boolean sleeping,
+            int sleepWeight
+    ) {
+        this(playerId, worldId, overworld, bypass, spectator, npc, false, vanished, afk, sleeping, sleepWeight);
     }
 }
